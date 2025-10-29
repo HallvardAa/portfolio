@@ -254,171 +254,170 @@ if (!gradientCanvas) {
 }
 
 
-// ====== SNAP SCROLLING ======
-let isAnimating = false;
-let animationFrame = null;
-let currentSectionIndex = 0;
-let sections = [];
-let isScrollingTimeout;
+// ====== SNAP SCROLLING (DESKTOP ONLY) ======
+const isMobileDevice = window.innerWidth <= 768 || 
+  /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-function initSections() {
-  sections = Array.from(document.querySelectorAll('section'));
-  
-  // Find which section we're starting on
-  const scrollPos = window.scrollY + window.innerHeight / 2;
-  sections.forEach((section, index) => {
-    const sectionTop = section.offsetTop;
-    const sectionHeight = section.offsetHeight;
-    if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
-      currentSectionIndex = index;
+// Only run snap scroll on desktop
+if (!isMobileDevice) {
+  let isAnimating = false;
+  let animationFrame = null;
+  let currentSectionIndex = 0;
+  let sections = [];
+
+  function initSections() {
+    sections = Array.from(document.querySelectorAll('section'));
+    
+    const scrollPos = window.scrollY + window.innerHeight / 2;
+    sections.forEach((section, index) => {
+      const sectionTop = section.offsetTop;
+      const sectionHeight = section.offsetHeight;
+      if (scrollPos >= sectionTop && scrollPos < sectionTop + sectionHeight) {
+        currentSectionIndex = index;
+      }
+    });
+  }
+
+  function snapToSection(targetIndex) {
+    if (isAnimating || !sections[targetIndex]) return;
+    
+    const targetSection = sections[targetIndex];
+    const targetScroll = targetSection.offsetTop;
+    const currentScroll = window.scrollY;
+    const distance = Math.abs(targetScroll - currentScroll);
+    
+    if (distance < 10) {
+      currentSectionIndex = targetIndex;
+      return;
     }
+    
+    const duration = Math.min(50, distance * 0.5);
+    const startTime = performance.now();
+    
+    isAnimating = true;
+    
+    function easeInOutQuart(t) {
+      return t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
+    }
+    
+    function animateScroll(currentTime) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = easeInOutQuart(progress);
+      
+      window.scrollTo(0, currentScroll + (targetScroll - currentScroll) * eased);
+      
+      if (progress < 1 && isAnimating) {
+        animationFrame = requestAnimationFrame(animateScroll);
+      } else {
+        isAnimating = false;
+        animationFrame = null;
+        currentSectionIndex = targetIndex;
+      }
+    }
+    
+    animationFrame = requestAnimationFrame(animateScroll);
+  }
+
+  function handleScroll(direction) {
+    if (isAnimating) return;
+    
+    if (direction > 0 && currentSectionIndex < sections.length - 1) {
+      snapToSection(currentSectionIndex + 1);
+    } else if (direction < 0 && currentSectionIndex > 0) {
+      snapToSection(currentSectionIndex - 1);
+    }
+  }
+
+  let lastScrollTime = 0;
+
+  window.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    
+    const now = Date.now();
+    const timeSinceLastScroll = now - lastScrollTime;
+    
+    if (timeSinceLastScroll < 600 || isAnimating) return;
+    
+    lastScrollTime = now;
+    const scrollDirection = e.deltaY > 0 ? 1 : -1;
+    
+    handleScroll(scrollDirection);
+  }, { passive: false });
+
+  window.addEventListener('keydown', (e) => {
+    if (isAnimating) return;
+    
+    if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault();
+      handleScroll(1);
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault();
+      handleScroll(-1);
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      snapToSection(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      snapToSection(sections.length - 1);
+    }
+  });
+
+  initSections();
+
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      initSections();
+      snapToSection(currentSectionIndex);
+    }, 150);
   });
 }
 
-function snapToSection(targetIndex) {
-  if (isAnimating || !sections[targetIndex]) return;
-  
-  const targetSection = sections[targetIndex];
-  const targetScroll = targetSection.offsetTop;
-  const currentScroll = window.scrollY;
-  const distance = Math.abs(targetScroll - currentScroll);
-  
-  if (distance < 10) {
-    currentSectionIndex = targetIndex;
-    return;
-  }
-  
-  const duration = Math.min(50, distance * 0.3);
-  const startTime = performance.now();
-  
-  isAnimating = true;
-  
-  function easeOutCubic(t) {
-    return 1 - Math.pow(1 - t, 3);
-  }
-  
-  function animateScroll(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const eased = easeOutCubic(progress);
-    
-    window.scrollTo(0, currentScroll + (targetScroll - currentScroll) * eased);
-    
-    if (progress < 1 && isAnimating) {
-      animationFrame = requestAnimationFrame(animateScroll);
-    } else {
-      isAnimating = false;
-      animationFrame = null;
-      currentSectionIndex = targetIndex;
-    }
-  }
-  
-  animationFrame = requestAnimationFrame(animateScroll);
-}
-
-function cancelAnimation() {
-  if (animationFrame) {
-    cancelAnimationFrame(animationFrame);
-    animationFrame = null;
-  }
-  isAnimating = false;
-}
-
-function handleScroll(direction) {
-  if (isAnimating) return;
-  
-  if (direction > 0 && currentSectionIndex < sections.length - 1) {
-    // Scroll down
-    snapToSection(currentSectionIndex + 1);
-  } else if (direction < 0 && currentSectionIndex > 0) {
-    // Scroll up
-    snapToSection(currentSectionIndex - 1);
-  }
-}
-
-let lastScrollTime = 0;
-let scrollDirection = 0;
-
-window.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  
-  const now = Date.now();
-  const timeSinceLastScroll = now - lastScrollTime;
-  
-  // Debounce wheel events (prevent too many rapid scrolls)
-  if (timeSinceLastScroll < 200 || isAnimating) return;
-  
-  lastScrollTime = now;
-  scrollDirection = e.deltaY > 0 ? 1 : -1;
-  
-  handleScroll(scrollDirection);
-}, { passive: false });
-
-// Handle keyboard navigation
-window.addEventListener('keydown', (e) => {
-  if (isAnimating) return;
-  
-  if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
-    e.preventDefault();
-    handleScroll(1);
-  } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
-    e.preventDefault();
-    handleScroll(-1);
-  } else if (e.key === 'Home') {
-    e.preventDefault();
-    snapToSection(0);
-  } else if (e.key === 'End') {
-    e.preventDefault();
-    snapToSection(sections.length - 1);
-  }
-});
-
-// Handle touch events for mobile
-let touchStartY = 0;
-let touchEndY = 0;
-
-window.addEventListener('touchstart', (e) => {
-  touchStartY = e.touches[0].clientY;
-}, { passive: true });
-
-window.addEventListener('touchend', (e) => {
-  if (isAnimating) return;
-  
-  touchEndY = e.changedTouches[0].clientY;
-  const diff = touchStartY - touchEndY;
-  
-  // Minimum swipe distance
-  if (Math.abs(diff) > 50) {
-    handleScroll(diff > 0 ? 1 : -1);
-  }
-}, { passive: true });
-
-// Initialize
-initSections();
-
-// Recalculate on resize
-let resizeTimeout;
-window.addEventListener('resize', () => {
-  clearTimeout(resizeTimeout);
-  resizeTimeout = setTimeout(() => {
-    initSections();
-    snapToSection(currentSectionIndex);
-  }, 150);
-});
-
+// Textarea fix for contact form
 (function () {
   const textarea = document.querySelector('textarea[name="message"]');
   if (!textarea) return;
 
-  // Intercept space key early so it doesn't bubble to page-level handlers that scroll.
   textarea.addEventListener('keydown', function (e) {
     if (e.code === 'Space' || e.key === ' ') {
-      e.stopPropagation(); // stop it reaching other handlers
-      // do NOT call preventDefault() — we want the space character inserted
+      e.stopPropagation();
     }
-  }, true); // use capture to catch it early
+  }, true);
 
-  // Prevent mouse/touch events from bubbling to any global handlers that might blur or hijack focus
   textarea.addEventListener('mousedown', e => e.stopPropagation(), true);
   textarea.addEventListener('touchstart', e => e.stopPropagation(), true);
 })();
+
+// Optimized Project card spotlight effect
+const cards = document.querySelectorAll('.project-card');
+
+cards.forEach(card => {
+  let rafId = null;
+  
+  card.addEventListener('mousemove', (e) => {
+    if (rafId) cancelAnimationFrame(rafId);
+    
+    rafId = requestAnimationFrame(() => {
+      const rect = card.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      
+      card.style.setProperty('--mouse-x', `${x}%`);
+      card.style.setProperty('--mouse-y', `${y}%`);
+      
+      rafId = null;
+    });
+  });
+  
+  card.addEventListener('mouseleave', () => {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    
+    card.style.setProperty('--mouse-x', '50%');
+    card.style.setProperty('--mouse-y', '50%');
+  });
+});
